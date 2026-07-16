@@ -246,43 +246,34 @@ class Database {
     const client = this.#getClient()
     if (!client) return { data: [...this.#localData.users], error: null }
     const { data, error } = await client.from('users').select('*')
-    if (error) return { data: [...this.#localData.users], error: null }
+    if (error) {
+      if (this.#localData.users.length) return { data: [...this.#localData.users], error: null }
+      const lsData = JSON.parse(localStorage.getItem('nm_users') || '[]')
+      if (lsData.length) return { data: lsData, error: null }
+      return { data: null, error }
+    }
+    this.#localData.users = data || []
+    this.#saveLocalData()
     return { data, error: null }
   }
 
   static async createUser(username, password, role) {
     const client = this.#getClient()
-    if (!client) {
-      if (this.#localData.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-        return { error: { message: 'Username sudah digunakan' } }
-      }
-      this.#localData.users.push({ username: username.trim(), password: password.trim(), role, created_at: new Date().toISOString() })
-      this.#saveLocalData()
-      return { error: null }
-    }
+    if (!client) return { error: { message: 'Database tidak tersedia' } }
     const { error } = await client.from('users').insert({ username: username.trim(), password: password.trim(), role })
-    if (error) {
-      if (this.#localData.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-        return { error: { message: 'Username sudah digunakan' } }
-      }
-      this.#localData.users.push({ username: username.trim(), password: password.trim(), role, created_at: new Date().toISOString() })
-      this.#saveLocalData()
-    }
+    if (error) return { error }
+    this.#localData.users.push({ username: username.trim(), password: password.trim(), role, created_at: new Date().toISOString() })
+    this.#saveLocalData()
     return { error: null }
   }
 
   static async deleteUser(username) {
     const client = this.#getClient()
-    if (!client) {
-      this.#localData.users = this.#localData.users.filter(u => u.username !== username)
-      this.#saveLocalData()
-      return { error: null }
-    }
+    if (!client) return { error: { message: 'Database tidak tersedia' } }
     const { error } = await client.from('users').delete().eq('username', username)
-    if (error) {
-      this.#localData.users = this.#localData.users.filter(u => u.username !== username)
-      this.#saveLocalData()
-    }
+    if (error) return { error }
+    this.#localData.users = this.#localData.users.filter(u => u.username !== username)
+    this.#saveLocalData()
     return { error: null }
   }
 

@@ -93,14 +93,6 @@ class App {
                 <label class="block text-sm font-medium text-slate-600 mb-1">Password</label>
                 <input type="password" id="login-password" class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition" placeholder="••••••••">
               </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-600 mb-1">Masuk Sebagai</label>
-                <select id="login-role" class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white transition">
-                  <option value="admin">Admin Toko</option>
-                  <option value="kasir">Kasir</option>
-                  <option value="pemilik">Pemilik</option>
-                </select>
-              </div>
               <button id="btn-login" class="ripple w-full py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition font-semibold text-lg active:scale-[.98]">
                 Masuk
               </button>
@@ -122,13 +114,13 @@ class App {
   static async #handleLogin() {
     const username = document.getElementById('login-username').value.trim()
     const password = document.getElementById('login-password').value.trim()
-    const role = document.getElementById('login-role').value
     if (!username) return alert('Masukkan nama pengguna!')
     this.showLoading()
-    const result = await Auth.login(username, password, role)
+    const result = await Auth.login(username, password)
     this.hideLoading()
     if (result.error) return alert(result.error)
-    window.location.hash = '#dashboard'
+    const page = result.user.role === 'kasir' ? 'pos' : 'dashboard'
+    window.location.hash = '#' + page
   }
 
   static #renderAppShell() {

@@ -1,14 +1,22 @@
 class Auth {
   static async initUsers() {
-    const { data: users } = await Database.getUsers()
-    if (!users || users.length === 0) {
+    const { data: users, error } = await Database.getUsers()
+    if (error || !users || users.length === 0) {
       const defaults = [
         { username: 'Pemilik', password: 'pemilik123', role: 'pemilik' },
         { username: 'Admin', password: 'admin123', role: 'admin' },
         { username: 'Kasir', password: 'kasir123', role: 'kasir' },
       ]
       for (const u of defaults) {
-        await Database.createUser(u.username, u.password, u.role)
+        const { error: e } = await Database.createUser(u.username, u.password, u.role)
+        if (e) {
+          const lsKey = 'nm_users'
+          const existing = JSON.parse(localStorage.getItem(lsKey) || '[]')
+          if (!existing.find(x => x.username.toLowerCase() === u.username.toLowerCase())) {
+            existing.push({ username: u.username, password: u.password, role: u.role, created_at: new Date().toISOString() })
+            localStorage.setItem(lsKey, JSON.stringify(existing))
+          }
+        }
       }
     }
   }
@@ -41,14 +49,13 @@ class Auth {
     return { error: null }
   }
 
-  static async login(username, password, role) {
+  static async login(username, password) {
     const users = await this.getUsers()
     const user = users.find(u =>
       u.username.toLowerCase() === username.toLowerCase() &&
-      u.password === password &&
-      u.role === role
+      u.password === password
     )
-    if (!user) return { error: 'Username, password, atau role salah' }
+    if (!user) return { error: 'Username atau password salah' }
     const session = { username: user.username, role: user.role, loginAt: new Date().toISOString() }
     localStorage.setItem(CONFIG.STORAGE_KEYS.USER, JSON.stringify(session))
     return { error: null, user: session }
