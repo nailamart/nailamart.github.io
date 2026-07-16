@@ -4,11 +4,14 @@ class BarangMasuk {
   static #scanning = false
   static #currentProduct = null
   static #editingTransactionId = null
+  static #lastScanTime = 0
+  static #lastScanCode = ''
 
   static init(container = null) {
     this.#container = container
     this.#render()
     this.#bindEvents()
+    setTimeout(() => document.getElementById('manual-barcode')?.focus(), 300)
   }
 
   static #render() {
@@ -85,8 +88,8 @@ class BarangMasuk {
         if (bc) this.#lookupBarcode(bc)
       }
     })
-    document.getElementById('riwayat-search')?.addEventListener('input', () => this.#loadRiwayat())
-    this.#loadRiwayat()
+    document.getElementById('riwayat-search')?.addEventListener('input', () => this.loadRiwayat())
+    this.loadRiwayat()
   }
 
   static async #toggleScanner() {
@@ -100,10 +103,25 @@ class BarangMasuk {
       try {
         this.#scanner = new Html5Qrcode('scanner-view')
         await this.#scanner.start({ facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 150 } },
-          (decodedText) => {
-            this.#lookupBarcode(decodedText)
-            this.#stopScanner()
+          {
+            fps: 15,
+            qrbox: { width: 350, height: 100 },
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.ITF,
+            ],
+          },
+          async (decodedText) => {
+            const now = Date.now()
+            if (decodedText === this.#lastScanCode && now - this.#lastScanTime < 2000) return
+            this.#lastScanCode = decodedText
+            this.#lastScanTime = now
+            await this.#lookupBarcode(decodedText)
           }
         )
       } catch (err) {
@@ -304,20 +322,24 @@ class BarangMasuk {
     }
 
     this.#renderForm(null, '')
-    document.getElementById('manual-barcode').value = ''
-    this.#loadRiwayat()
+    const bcInput = document.getElementById('manual-barcode')
+    bcInput.value = ''
+    bcInput.focus()
+    this.loadRiwayat()
   }
 
   static #cancelForm() {
     this.#currentProduct = null
     this.#editingTransactionId = null
     this.#renderForm(null, '')
-    document.getElementById('manual-barcode').value = ''
+    const bc = document.getElementById('manual-barcode')
+    bc.value = ''
+    bc.focus()
     const card = document.getElementById('form-product-card')
     if (card) card.classList.add('hidden')
   }
 
-  static async #loadRiwayat() {
+  static async loadRiwayat() {
     const { data: txns } = await Database.getTransactions('pengeluaran')
     const tbody = document.getElementById('riwayat-table-body')
     const mobileList = document.getElementById('riwayat-mobile-list')
@@ -364,7 +386,7 @@ class BarangMasuk {
       let stock = null
 
       if (!productName || !barcode) {
-        const parsed = this.#parseDesc(t.description || '', allProducts || [])
+        const parsed = this.parseDesc(t.description || '', allProducts || [])
         if (!productName) productName = parsed.name
         if (!barcode) barcode = parsed.barcode
       }
@@ -434,7 +456,7 @@ class BarangMasuk {
     `).join('')
   }
 
-  static #parseDesc(desc, products) {
+  static parseDesc(desc, products) {
     const result = { name: '', qty: '', barcode: '' }
     if (!desc) return result
     const nameMatch = desc.match(/:\s*(.+?)\s*\(/)
@@ -459,7 +481,7 @@ class BarangMasuk {
       const tx = (txns || []).find(t => t.id === transactionId)
       if (tx) {
         const { data: allProducts } = await Database.getProducts()
-        const parsed = this.#parseDesc(tx.description || '', allProducts || [])
+        const parsed = this.parseDesc(tx.description || '', allProducts || [])
         barcode = parsed.barcode
       }
     }
@@ -487,6 +509,6 @@ class BarangMasuk {
     const { error } = await Database.deleteTransaction(transactionId)
     App.hideLoading()
     if (error) return alert('Gagal menghapus: ' + error.message)
-    this.#loadRiwayat()
+    this.loadRiwayat()
   }
 }

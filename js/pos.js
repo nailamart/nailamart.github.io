@@ -3,6 +3,9 @@ class POS {
   static #cart = []
   static #scanner = null
   static #scanning = false
+  static #lastScanTime = 0
+  static #lastScanCode = ''
+  static #searchTimeout = null
 
   static init(container = null) {
     this.#container = container
@@ -10,6 +13,7 @@ class POS {
     this.#render()
     this.#bindEvents()
     this.#updateCartDisplay()
+    setTimeout(() => document.getElementById('pos-barcode-input')?.focus(), 300)
   }
 
   static #render() {
@@ -93,6 +97,7 @@ class POS {
     })
     document.getElementById('pos-barcode-input')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
+        clearTimeout(this.#searchTimeout)
         const val = e.target.value.trim()
         if (val) this.addToCart(val)
         document.getElementById('pos-search-result').innerHTML = '<p class="text-slate-400 text-center py-4 text-sm">Scan atau cari produk</p>'
@@ -100,8 +105,12 @@ class POS {
     })
     document.getElementById('pos-barcode-input')?.addEventListener('input', (e) => {
       const val = e.target.value.trim()
-      if (val.length >= 1) this.searchProducts(val)
-      else document.getElementById('pos-search-result').innerHTML = '<p class="text-slate-400 text-center py-4 text-sm">Ketik nama atau barcode produk</p>'
+      clearTimeout(this.#searchTimeout)
+      if (val.length >= 1) {
+        this.#searchTimeout = setTimeout(() => this.searchProducts(val), 300)
+      } else {
+        document.getElementById('pos-search-result').innerHTML = '<p class="text-slate-400 text-center py-4 text-sm">Ketik nama atau barcode produk</p>'
+      }
     })
     document.getElementById('btn-clear-cart')?.addEventListener('click', () => this.#clearCart())
     document.getElementById('btn-checkout')?.addEventListener('click', () => this.#checkout())
@@ -122,11 +131,26 @@ class POS {
       try {
         this.#scanner = new Html5Qrcode('pos-scanner-element')
         await this.#scanner.start({ facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 150 } },
-          (decodedText) => {
-            this.addToCart(decodedText)
+          {
+            fps: 15,
+            qrbox: { width: 350, height: 100 },
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.ITF,
+            ],
+          },
+          async (decodedText) => {
+            const now = Date.now()
+            if (decodedText === this.#lastScanCode && now - this.#lastScanTime < 2000) return
+            this.#lastScanCode = decodedText
+            this.#lastScanTime = now
             document.getElementById('pos-barcode-input').value = decodedText
-            this.#stopScanner()
+            await this.addToCart(decodedText)
           }
         )
       } catch (err) {
@@ -157,18 +181,26 @@ class POS {
     App.showLoading()
     const { data: product, error } = await Database.getProductByBarcode(barcode)
     App.hideLoading()
+    const input = document.getElementById('pos-barcode-input')
     if (error || !product) {
       alert('Produk dengan barcode ' + barcode + ' tidak ditemukan!')
+      input.value = ''
+      input.focus()
       return
     }
     if ((product.stock || 0) < 1) {
       alert('Stok ' + product.product_name + ' habis!')
+      input.value = ''
+      input.focus()
       return
     }
     const existing = this.#cart.find(c => c.barcode === barcode)
     if (existing) {
       if (existing.quantity >= (product.stock || 0)) {
-        return alert('Stok tidak mencukupi!')
+        alert('Stok tidak mencukupi!')
+        input.value = ''
+        input.focus()
+        return
       }
       existing.quantity++
       existing.subtotal = existing.quantity * existing.price_per_unit
@@ -184,7 +216,9 @@ class POS {
     }
     this.#saveCart()
     this.#updateCartDisplay()
-    document.getElementById('pos-barcode-input').value = ''
+    const input = document.getElementById('pos-barcode-input')
+    input.value = ''
+    input.focus()
     document.getElementById('pos-search-result').innerHTML = `
       <div class="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg">
         <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
