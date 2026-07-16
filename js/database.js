@@ -1,7 +1,7 @@
 class Database {
   static #supabase = null
   static #useLocalFallback = false
-  static #localData = { products: [], transactions: [], transaction_items: [] }
+  static #localData = { products: [], transactions: [], transaction_items: [], users: [] }
 
   static async init() {
     if (typeof supabase === 'undefined') {
@@ -26,9 +26,11 @@ class Database {
       const p = localStorage.getItem('nm_products')
       const t = localStorage.getItem('nm_transactions')
       const ti = localStorage.getItem('nm_transaction_items')
+      const u = localStorage.getItem('nm_users')
       if (p) this.#localData.products = JSON.parse(p)
       if (t) this.#localData.transactions = JSON.parse(t)
       if (ti) this.#localData.transaction_items = JSON.parse(ti)
+      if (u) this.#localData.users = JSON.parse(u)
     } catch { /* ignore */ }
   }
 
@@ -36,6 +38,7 @@ class Database {
     localStorage.setItem('nm_products', JSON.stringify(this.#localData.products))
     localStorage.setItem('nm_transactions', JSON.stringify(this.#localData.transactions))
     localStorage.setItem('nm_transaction_items', JSON.stringify(this.#localData.transaction_items))
+    localStorage.setItem('nm_users', JSON.stringify(this.#localData.users))
   }
 
   static #getClient() {
@@ -236,6 +239,51 @@ class Database {
       return { data, error: null }
     }
     return await client.from('transaction_items').select('*, products(*)').eq('transaction_id', transactionId)
+  }
+
+  // Users
+  static async getUsers() {
+    const client = this.#getClient()
+    if (!client) return { data: [...this.#localData.users], error: null }
+    const { data, error } = await client.from('users').select('*')
+    if (error) return { data: [...this.#localData.users], error: null }
+    return { data, error: null }
+  }
+
+  static async createUser(username, password, role) {
+    const client = this.#getClient()
+    if (!client) {
+      if (this.#localData.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+        return { error: { message: 'Username sudah digunakan' } }
+      }
+      this.#localData.users.push({ username: username.trim(), password: password.trim(), role, created_at: new Date().toISOString() })
+      this.#saveLocalData()
+      return { error: null }
+    }
+    const { error } = await client.from('users').insert({ username: username.trim(), password: password.trim(), role })
+    if (error) {
+      if (this.#localData.users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+        return { error: { message: 'Username sudah digunakan' } }
+      }
+      this.#localData.users.push({ username: username.trim(), password: password.trim(), role, created_at: new Date().toISOString() })
+      this.#saveLocalData()
+    }
+    return { error: null }
+  }
+
+  static async deleteUser(username) {
+    const client = this.#getClient()
+    if (!client) {
+      this.#localData.users = this.#localData.users.filter(u => u.username !== username)
+      this.#saveLocalData()
+      return { error: null }
+    }
+    const { error } = await client.from('users').delete().eq('username', username)
+    if (error) {
+      this.#localData.users = this.#localData.users.filter(u => u.username !== username)
+      this.#saveLocalData()
+    }
+    return { error: null }
   }
 
   // Dashboard

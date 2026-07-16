@@ -1,20 +1,20 @@
 class Pengguna {
   static #container = null
 
-  static init(container = null) {
+  static async init(container = null) {
     if (!Auth.hasRole('pemilik')) {
       alert('Hanya Pemilik yang dapat mengakses halaman ini')
       window.location.hash = '#dashboard'
       return
     }
     this.#container = container
-    this.#render()
+    await this.#render()
     this.#bindEvents()
   }
 
-  static #render() {
+  static async #render() {
     const section = this.#container || document.getElementById('page-pengguna')
-    const users = Auth.getUsers()
+    const users = await Auth.getUsers()
     const currentUser = Auth.getCurrentUser()
 
     section.innerHTML = `
@@ -73,25 +73,29 @@ class Pengguna {
     })
   }
 
-  static #handleAdd() {
+  static async #handleAdd() {
     const username = document.getElementById('pg-username').value.trim()
     const password = document.getElementById('pg-password').value.trim()
     const role = document.getElementById('pg-role').value
 
-    const result = Auth.createUser(username, password, role)
+    App.showLoading()
+    const result = await Auth.createUser(username, password, role)
+    App.hideLoading()
     if (result.error) return alert(result.error)
 
     document.getElementById('pg-username').value = ''
     document.getElementById('pg-password').value = ''
-    this.#render()
+    await this.#render()
     this.#bindEvents()
   }
 
-  static #handleDelete(username) {
+  static async #handleDelete(username) {
     if (!confirm(`Hapus pengguna "${username}"?`)) return
-    const result = Auth.deleteUser(username)
+    App.showLoading()
+    const result = await Auth.deleteUser(username)
+    App.hideLoading()
     if (result.error) return alert(result.error)
-    this.#render()
+    await this.#render()
     this.#bindEvents()
   }
 }

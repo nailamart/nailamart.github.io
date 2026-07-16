@@ -12,7 +12,7 @@ class App {
 
   static async init() {
     await Database.init()
-    Auth.initUsers()
+    await Auth.initUsers()
     this.#checkAuth()
     this.#bindGlobalEvents()
     window.addEventListener('hashchange', () => this.#handleRoute())
@@ -114,14 +114,19 @@ class App {
     document.getElementById('login-password')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.#handleLogin()
     })
+    document.getElementById('login-username')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('login-password').focus()
+    })
   }
 
-  static #handleLogin() {
+  static async #handleLogin() {
     const username = document.getElementById('login-username').value.trim()
     const password = document.getElementById('login-password').value.trim()
     const role = document.getElementById('login-role').value
     if (!username) return alert('Masukkan nama pengguna!')
-    const result = Auth.login(username, password, role)
+    this.showLoading()
+    const result = await Auth.login(username, password, role)
+    this.hideLoading()
     if (result.error) return alert(result.error)
     window.location.hash = '#dashboard'
   }
