@@ -59,7 +59,16 @@ class Database {
     }
     let query = client.from('products').select('*').order('created_at', { ascending: false })
     if (search) query = query.or(`barcode.ilike.%${search}%,product_name.ilike.%${search}%`)
-    return await query
+    const { data, error } = await query
+    if (error || !data || data.length === 0) {
+      let local = this.#localData.products
+      if (search) {
+        const s = search.toLowerCase()
+        local = local.filter(p => p.barcode?.toLowerCase().includes(s) || p.product_name?.toLowerCase().includes(s))
+      }
+      if (local.length) return { data: local, error: null }
+    }
+    return { data, error }
   }
 
   static async getProductByBarcode(barcode) {
@@ -225,7 +234,24 @@ class Database {
     if (type) query = query.eq('type', type)
     if (startDate) query = query.gte('created_at', startDate)
     if (endDate) query = query.lte('created_at', endDate + 'T23:59:59')
-    return await query
+    const { data, error } = await query
+    if (error || !data || data.length === 0) {
+      let local = [...this.#localData.transactions].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      if (type) local = local.filter(t => t.type === type)
+      if (startDate) local = local.filter(t => new Date(t.created_at) >= new Date(startDate))
+      if (endDate) local = local.filter(t => new Date(t.created_at) <= new Date(endDate + 'T23:59:59'))
+      if (local.length) {
+        local = local.map(t => ({
+          ...t,
+          transaction_items: (t.transaction_items || []).map(item => {
+            const prod = this.#localData.products.find(p => p.id === item.product_id)
+            return { ...item, products: prod || null }
+          }),
+        }))
+        return { data: local, error: null }
+      }
+    }
+    return { data, error }
   }
 
   static async getTransactionItems(transactionId) {
@@ -267,6 +293,24 @@ class Database {
     return { error: null }
   }
 
+  static async updateUser(username, updates) {
+    const client = this.#getClient()
+    if (!client) return { error: { message: 'Database tidak tersedia' } }
+    const payload = {}
+    if (updates.password !== undefined) payload.password = updates.password
+    if (updates.role !== undefined) payload.role = updates.role
+    if (Object.keys(payload).length === 0) return { error: null }
+    const { error } = await client.from('users').update(payload).eq('username', username)
+    if (error) return { error }
+    const idx = this.#localData.users.findIndex(u => u.username === username)
+    if (idx >= 0) {
+      if (updates.password !== undefined) this.#localData.users[idx].password = updates.password
+      if (updates.role !== undefined) this.#localData.users[idx].role = updates.role
+      this.#saveLocalData()
+    }
+    return { error: null }
+  }
+
   static async deleteUser(username) {
     const client = this.#getClient()
     if (!client) return { error: { message: 'Database tidak tersedia' } }
@@ -274,6 +318,78 @@ class Database {
     if (error) return { error }
     this.#localData.users = this.#localData.users.filter(u => u.username !== username)
     this.#saveLocalData()
+    return { error: null }
+  }
+
+  static async deleteAllTransactions() {
+    const client = this.#getClient()
+    if (!client) {
+      this.#localData.transactions = []
+      this.#localData.transaction_items = []
+      this.#saveLocalData()
+      return { error: null }
+    }
+    const { error: e1 } = await client.from('transactions').delete().gte('created_at', '2000-01-01')
+    if (e1) return { error: e1 }
+    this.#localData.transactions = []
+    this.#localData.transaction_items = []
+    this.#saveLocalData()
+    return { error: null }
+  }
+
+  static async deleteAllProducts() {
+    const client = this.#getClient()
+    if (!client) {
+      this.#localData.products = []
+      this.#saveLocalData()
+      return { error: null }
+    }
+    const { error } = await client.from('products').delete().gte('created_at', '2000-01-01')
+    if (error) return { error }
+    this.#localData.products = []
+    this.#saveLocalData()
+    return { error: null }
+  }
+
+  static async resetAllStock() {
+    const client = this.#getClient()
+    if (!client) {
+      this.#localData.products = this.#localData.products.map(p => ({ ...p, stock: 0 }))
+      this.#saveLocalData()
+      return { error: null }
+    }
+    const { error } = await client.from('products').update({ stock: 0, updated_at: new Date() }).gte('created_at', '2000-01-01')
+    if (error) return { error }
+    this.#localData.products = this.#localData.products.map(p => ({ ...p, stock: 0 }))
+    this.#saveLocalData()
+    return { error: null }
+  }
+
+  // Cache version (sync clear cache across devices)
+  static CACHE_VERSION_KEY = 'app_cache_version'
+
+  static async getCacheVersion() {
+    const client = this.#getClient()
+    if (!client) return { version: parseInt(localStorage.getItem(this.CACHE_VERSION_KEY) || '0'), error: null }
+    const { data, error } = await client.from('app_settings').select('value').eq('key', this.CACHE_VERSION_KEY).maybeSingle()
+    if (error || !data) return { version: 0, error: null }
+    return { version: parseInt(data.value || '0'), error: null }
+  }
+
+  static async incrementCacheVersion() {
+    const { version } = await this.getCacheVersion()
+    const newVersion = version + 1
+    const client = this.#getClient()
+    if (!client) {
+      localStorage.setItem(this.CACHE_VERSION_KEY, String(newVersion))
+      return { error: null }
+    }
+    const { error } = await client.from('app_settings').upsert(
+      { key: this.CACHE_VERSION_KEY, value: String(newVersion), updated_at: new Date() },
+      { onConflict: 'key' }
+    )
+    if (error) return { error }
+    localStorage.setItem(this.CACHE_VERSION_KEY, String(newVersion))
     return { error: null }
   }
 

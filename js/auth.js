@@ -38,6 +38,15 @@ class Auth {
     return { error: error?.message || null }
   }
 
+  static async updateUser(username, password, role) {
+    const updates = {}
+    if (password && password.trim()) updates.password = password.trim()
+    if (role) updates.role = role
+    if (Object.keys(updates).length === 0) return { error: 'Tidak ada perubahan' }
+    const { error } = await Database.updateUser(username, updates)
+    return { error: error?.message || null }
+  }
+
   static async deleteUser(username) {
     const current = this.getCurrentUser()
     if (current?.username === username) return { error: 'Tidak bisa menghapus akun sendiri' }
@@ -101,8 +110,10 @@ class Auth {
       ],
       pemilik: [
         { id: 'dashboard', label: 'Dashboard', icon: 'chart-pie', page: 'dashboard' },
-        { id: 'pengguna', label: 'Pengguna', icon: 'users', page: 'pengguna' },
+        { id: 'barang-masuk', label: 'Barang Masuk', icon: 'inbox-arrow-down', page: 'barang-masuk' },
+        { id: 'pos', label: 'POS / Kasir', icon: 'shopping-cart', page: 'pos' },
         { id: 'laporan', label: 'Laporan', icon: 'document-text', page: 'laporan' },
+        { id: 'pengguna', label: 'Pengguna', icon: 'users', page: 'pengguna' },
       ],
     }
     return menus[role] || []

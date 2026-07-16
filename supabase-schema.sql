@@ -32,6 +32,13 @@ create table if not exists users (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 4a. Tabel: app_settings (pengaturan aplikasi, sync antar perangkat)
+create table if not exists app_settings (
+  key varchar(100) primary key,
+  value text not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- 4. Tabel: transaction_items (detail item per transaksi)
 create table if not exists transaction_items (
   id uuid default gen_random_uuid() primary key,
@@ -58,18 +65,21 @@ alter table if exists products enable row level security;
 alter table if exists transactions enable row level security;
 alter table if exists transaction_items enable row level security;
 alter table if exists users enable row level security;
+alter table if exists app_settings enable row level security;
 
 -- Hapus policy lama dulu agar bisa recreate tanpa error
 drop policy if exists "Allow all on products" on products;
 drop policy if exists "Allow all on transactions" on transactions;
 drop policy if exists "Allow all on transaction_items" on transaction_items;
 drop policy if exists "Allow all on users" on users;
+drop policy if exists "Allow all on app_settings" on app_settings;
 
 -- Policy: izinkan semua operasi untuk anon key
 create policy "Allow all on products" on products for all using (true) with check (true);
 create policy "Allow all on transactions" on transactions for all using (true) with check (true);
 create policy "Allow all on transaction_items" on transaction_items for all using (true) with check (true);
 create policy "Allow all on users" on users for all using (true) with check (true);
+create policy "Allow all on app_settings" on app_settings for all using (true) with check (true);
 
 -- ============================================================
 -- Trigger: auto-update updated_at di tabel products

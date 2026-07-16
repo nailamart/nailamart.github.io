@@ -12,11 +12,24 @@ class App {
 
   static async init() {
     await Database.init()
+    await this.#checkCacheVersion()
     await Auth.initUsers()
     this.#checkAuth()
     this.#bindGlobalEvents()
     window.addEventListener('hashchange', () => this.#handleRoute())
     window.addEventListener('resize', () => this.#onResize())
+  }
+
+  static async #checkCacheVersion() {
+    const { version } = await Database.getCacheVersion()
+    const localVersion = parseInt(localStorage.getItem('nm_cache_version') || '0')
+    if (version > localVersion) {
+      const keys = ['nm_products', 'nm_transactions', 'nm_transaction_items', 'nm_users', 'naila_mart_user', 'naila_mart_cart', 'nm_cache_version']
+      keys.forEach(k => localStorage.removeItem(k))
+      localStorage.setItem('nm_cache_version', String(version))
+      console.log('Cache cleared (version ' + version + ')')
+    }
+    localStorage.setItem('nm_cache_version', String(version))
   }
 
   static #onResize() {
@@ -283,17 +296,20 @@ class App {
         <div class="stat-card animate-pulse"><div class="h-14 md:h-16 bg-slate-200 rounded"></div></div>
         <div class="stat-card animate-pulse"><div class="h-14 md:h-16 bg-slate-200 rounded"></div></div>
       </div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <div class="stat-card">
-          <h2 class="text-base md:text-lg font-semibold text-slate-700 mb-3 md:mb-4">Grafik Pemasukan vs Pengeluaran</h2>
-          <canvas id="dash-chart" height="260"></canvas>
-        </div>
+      <div class="grid grid-cols-1 gap-4 md:gap-6">
         <div class="stat-card">
           <h2 class="text-base md:text-lg font-semibold text-slate-700 mb-3 md:mb-4">Stok Menipis</h2>
           <div id="low-stock-list"></div>
         </div>
       </div>
+      <div id="clear-cache-container"></div>
     `
+    if (Auth.hasRole('pemilik')) {
+      const container = document.getElementById('clear-cache-container')
+      if (container) {
+        container.innerHTML = '<div class="mt-6 flex justify-end"><button id="btn-clear-cache" class="px-4 py-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition text-xs font-medium">Hapus Cache Semua Perangkat</button></div>'
+      }
+    }
     const stats = await Database.getDashboardStats()
     const statsEl = document.getElementById('dash-stats')
     if (statsEl) {
@@ -318,6 +334,14 @@ class App {
     }
     this.#renderDashboardChart(stats)
     this.#renderLowStock(stats)
+    document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
+      if (!confirm('Hapus cache di SEMUA perangkat? Setiap pengguna harus reload halaman setelah ini.')) return
+      App.showLoading()
+      await Database.incrementCacheVersion()
+      App.hideLoading()
+      alert('Cache berhasil dihapus di semua perangkat. Reload halaman ini...')
+      window.location.reload()
+    })
   }
 
   static #formatNumber(n) { return (n || 0).toLocaleString() }

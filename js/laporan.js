@@ -40,6 +40,10 @@ class Laporan {
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
           PDF
         </button>
+        <button id="btn-clear-data" class="flex-1 px-4 md:px-5 py-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition text-xs md:text-sm font-medium flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          Hapus Semua
+        </button>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6">
         <div class="stat-card">
@@ -55,11 +59,7 @@ class Laporan {
           <p id="stat-expense" class="text-lg md:text-2xl font-bold text-rose-500">Rp 0</p>
         </div>
       </div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-        <div class="stat-card">
-          <h2 class="text-base md:text-lg font-semibold text-slate-700 mb-3 md:mb-4">Grafik Keuangan</h2>
-          <canvas id="finance-chart" height="260"></canvas>
-        </div>
+      <div class="mb-4 md:mb-6">
         <div class="stat-card">
           <h2 class="text-base md:text-lg font-semibold text-slate-700 mb-3 md:mb-4">Riwayat Transaksi</h2>
           <div class="overflow-x-auto max-h-[320px] md:max-h-[400px] overflow-y-auto">
@@ -95,6 +95,7 @@ class Laporan {
     })
     document.getElementById('btn-export-excel')?.addEventListener('click', () => this.#exportExcel())
     document.getElementById('btn-export-pdf')?.addEventListener('click', () => this.#exportPDF())
+    document.getElementById('btn-clear-data')?.addEventListener('click', () => this.#clearAllData())
   }
 
   static async #loadData() {
@@ -134,7 +135,6 @@ class Laporan {
     document.getElementById('stat-profit').textContent = 'Rp ' + (stats.grossProfit || 0).toLocaleString()
     document.getElementById('stat-expense').textContent = 'Rp ' + (stats.totalModal || 0).toLocaleString()
 
-    this.#renderChart(stats)
     this.#renderTable(stats.transactions)
   }
 
@@ -236,6 +236,19 @@ class Laporan {
     ws['!cols'] = [{ wch: 5 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }]
     XLSX.utils.book_append_sheet(wb, ws, 'Laporan Keuangan')
     XLSX.writeFile(wb, `Laporan_Keuangan_NailaMart_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  static async #clearAllData() {
+    if (!confirm('Hapus SEMUA data (transaksi, stok, & produk)? Tindakan ini tidak bisa dibatalkan!')) return
+    if (!confirm('Yakin? Semua data akan dihapus termasuk produk & transaksi.')) return
+    App.showLoading()
+    const { error: e1 } = await Database.deleteAllTransactions()
+    if (e1) { App.hideLoading(); return alert('Gagal hapus transaksi: ' + e1.message) }
+    const { error: e2 } = await Database.deleteAllProducts()
+    if (e2) { App.hideLoading(); return alert('Gagal hapus produk: ' + e2.message) }
+    App.hideLoading()
+    alert('Semua data berhasil dihapus.')
+    this.#loadData()
   }
 
   static async #exportPDF() {
